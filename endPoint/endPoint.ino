@@ -3,15 +3,15 @@
 #include <SPI.h>
 
 // Pin mapping... Change the pins according to microcontroller used
-
 // for feather32u4
-#define RFM95_DIO0 7 // IRQ para dado novo
+#define RFM95_DIO0 7 // IRQ for new data
 #define RFM95_DIO1 5
 #define RFM95_DIO2 6
-#define RFM95_CS 8 // Chip select do SPI
-#define RFM95_RST 4 // Pino de reset
+#define RFM95_CS 8 // SPI's chip select
+#define RFM95_RST 4 // Reset pin
+#define INTERRUPT_PIN 2
 
-#define ACTIVE_CHANNEL 63 // active channel (US915 channel 63 which are at 914.9Mhz)
+#define ACTIVE_CHANNEL 63 // US915 standard, channel 63 is at 914.9MHz
 
 const lmic_pinmap lmic_pins =
 {
@@ -22,13 +22,13 @@ const lmic_pinmap lmic_pins =
 };
 
 // LoRaWAN NwkSKey, TTN network session key, note: bytes are stored as big endian in this array as expected for LMIC library
-static const PROGMEM u1_t NWKSKEY[16] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+static const PROGMEM u1_t NWKSKEY[16] = {};
 
 // LoRaWAN AppSKey, TTN application session key, note: bytes are stored as big endian in this array as expected for LMIC library
-static const u1_t PROGMEM APPSKEY[16] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+static const u1_t PROGMEM APPSKEY[16] = {};
 
 // LoRaWAN end-device address, TTN DevAddr
-static const u4_t DEVADDR = 0xFFFFFFFF ;
+static const u4_t DEVADDR = 0x;
 
 // These callbacks are only used in over-the-air activation, so they are
 // left empty here (we cannot leave them out completely unless
@@ -37,12 +37,10 @@ void os_getArtEui (u1_t* buf) { }
 void os_getDevEui (u1_t* buf) { }
 void os_getDevKey (u1_t* buf) { }
 
+
+volatile bool sendMsg = false;
 static uint8_t mydata[2] = {0xFF,0x00};
 static osjob_t sendjob;
-
-// Schedule TX every this many seconds (might become longer due to duty
-// cycle limitations).
-const unsigned TX_INTERVAL = 60;
 
 void onEvent (ev_t ev)
 {
@@ -80,6 +78,7 @@ void onEvent (ev_t ev)
         break;
     case EV_TXCOMPLETE:
         Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
+        sendMsg = false;
         if (LMIC.dataLen)
         {
             // data received in rx slot after tx
@@ -87,8 +86,6 @@ void onEvent (ev_t ev)
             Serial.write(LMIC.frame + LMIC.dataBeg, LMIC.dataLen);
             Serial.println();
         }
-        // Schedule next transmission
-        os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(TX_INTERVAL), do_send);
         break;
     case EV_LOST_TSYNC:
         Serial.println(F("EV_LOST_TSYNC"));
@@ -112,25 +109,28 @@ void onEvent (ev_t ev)
     }
 }
 
-void do_send(osjob_t* j)
+void doSend(osjob_t* j)
 {
-    static uint8_t counter = 0;
-
     // Check if there is not a current TX/RX job running
     if (LMIC.opmode & OP_TXRXPEND)
     {
         Serial.println(F("OP_TXRXPEND, not sending"));
+        sendMsg = true; // retry to send
     }
     else
     {
         // Prepare upstream data transmission at the next possible time.
-        mydata[1] = counter;
-        counter++;
+        mydata[1] = 1;
         LMIC_setTxData2(1, mydata, sizeof(mydata), 0);
         Serial.println(F("Packet queued"));
         Serial.println(LMIC.freq);
     }
     // Next TX is scheduled after TX_COMPLETE event.
+}
+
+void interrupt()
+{
+    sendMsg = true;
 }
 
 void setup()
@@ -155,8 +155,7 @@ void setup()
     memcpy_P(nwkskey, NWKSKEY, sizeof(NWKSKEY));
     LMIC_setSession (0x1, DEVADDR, nwkskey, appskey);
 
-    // Configuring channels     
-
+    // Configuring channels
     for (uint8_t channel = 0; channel < 72; channel++)  
     {
         if (channel != ACTIVE_CHANNEL) LMIC_disableChannel(channel);
@@ -167,19 +166,24 @@ void setup()
     LMIC_setLinkCheckMode(0);
 
     // Set data rate and transmit power (note: txpow seems to be ignored by the library)
-    LMIC_setDrTxpow(DR_SF7, 14);
+    // LMIC_setDrTxpow(DR_SF7, 14);
     // LMIC_setDrTxpow(DR_SF8, 14);
-    // LMIC_setDrTxpow(DR_SF9, 14);
+    LMIC_setDrTxpow(DR_SF9, 14);
     // LMIC_setDrTxpow(DR_SF10, 14);
     // LMIC_setDrTxpow(DR_SF8C, 14);
 
-    // Start job
-    do_send(&sendjob);
-    Serial.println("Freq");
-    Serial.println(LMIC.freq);
+    // Attach Interrupt
+    pinMode(INTERRUPT_PIN, INPUT);
+    attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN), interrupt, RISING);    
 }
 
 void loop()
-{
-    os_runloop_once();
+{   
+    if (sendMsg)
+    {
+        // Schedule next transmission for the next second
+        os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(1), doSend);
+        sendMsg = false;
+    }
+    os_runloop_once();    
 }
