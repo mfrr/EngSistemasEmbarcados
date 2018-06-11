@@ -3,7 +3,7 @@
 #include <SPI.h>
 
 // Pin mapping... Change the pins according to microcontroller used
-// for feather32u4
+// for featherInterrupt
 #define RFM95_DIO0 7 // IRQ for new data
 #define RFM95_DIO1 5
 #define RFM95_DIO2 6
@@ -22,13 +22,13 @@ const lmic_pinmap lmic_pins =
 };
 
 // LoRaWAN NwkSKey, TTN network session key, note: bytes are stored as big endian in this array as expected for LMIC library
-static const PROGMEM u1_t NWKSKEY[16] = {};
+static const PROGMEM u1_t NWKSKEY[16] = {  };
 
 // LoRaWAN AppSKey, TTN application session key, note: bytes are stored as big endian in this array as expected for LMIC library
-static const u1_t PROGMEM APPSKEY[16] = {};
+static const u1_t PROGMEM APPSKEY[16] = { };
 
 // LoRaWAN end-device address, TTN DevAddr
-static const u4_t DEVADDR = 0x;
+static const u4_t DEVADDR = 0x0;
 
 // These callbacks are only used in over-the-air activation, so they are
 // left empty here (we cannot leave them out completely unless
@@ -128,9 +128,42 @@ void doSend(osjob_t* j)
     // Next TX is scheduled after TX_COMPLETE event.
 }
 
-void interrupt()
+void initTimer()
 {
-    sendMsg = true;
+    noInterrupts();    
+    TCCR1A = 0; // config mode of operation
+    TCCR1B = 0; // config mode of operation
+    OCR1A = 1562; // 1562 ticks with prescale 1024 at 16MHz ~ 100ms    
+    TIMSK1 |= (1 << OCIE1A); // enable TIMER1_COMPA_vect interrupt
+    interrupts();
+}
+
+void startTimer()
+{
+    noInterrupts();   
+    TCNT1 = 0; // initialize counter reg with 0
+    TCCR1B |= (1 << WGM12) | (1<<CS10) | (1 << CS12); // start timer and set up timer with prescaler = 1024 
+    interrupts();
+}
+
+void stopTimer()
+{
+    noInterrupts();
+    TCCR1B = 0; // stop counting
+    interrupts();
+}
+
+ISR(TIMER1_COMPA_vect)
+{
+    if(HIGH == digitalRead(INTERRUPT_PIN))
+        sendMsg = true;
+
+    stopTimer();
+}
+
+void pinInterrupt()
+{
+    startTimer(); // start ~ 100ms timer
 }
 
 void setup()
@@ -174,7 +207,9 @@ void setup()
 
     // Attach Interrupt
     pinMode(INTERRUPT_PIN, INPUT);
-    attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN), interrupt, RISING);    
+    attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN), pinInterrupt, RISING);
+
+    initTimer(); 
 }
 
 void loop()
