@@ -22,13 +22,13 @@ const lmic_pinmap lmic_pins =
 };
 
 // LoRaWAN NwkSKey, TTN network session key, note: bytes are stored as big endian in this array as expected for LMIC library
-static const PROGMEM u1_t NWKSKEY[16] = {  };
+static const PROGMEM u1_t NWKSKEY[16] = {};
 
 // LoRaWAN AppSKey, TTN application session key, note: bytes are stored as big endian in this array as expected for LMIC library
-static const u1_t PROGMEM APPSKEY[16] = { };
+static const u1_t PROGMEM APPSKEY[16] = {};
 
 // LoRaWAN end-device address, TTN DevAddr
-static const u4_t DEVADDR = 0x0;
+static const u4_t DEVADDR = 0x00;
 
 // These callbacks are only used in over-the-air activation, so they are
 // left empty here (we cannot leave them out completely unless
@@ -220,5 +220,5 @@ void loop()
         os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(1), doSend);
         sendMsg = false;
     }
-    os_runloop_once();    
+    os_runloop_once(); // controls the LoRaWAN stack
 }
