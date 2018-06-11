@@ -60,16 +60,17 @@ def callbackSendMenssage(chat_id,text):
 def mqttOnMessage(client, userdata, message):
 	msgDict = json.loads(message.payload)	
 	devId = msgDict["dev_id"]
-	counter = msgDict["payload_fields"]["counter"]
+	counter = int(msgDict["payload_fields"]["counter"])
 	print devId, counter
-	DEV_IDS_LOCK.acquire()
-	chatIds = DEV_IDS.get(devId, None)
-	if chatIds is not None:
-		jobQueue = userdata
-		msg = u'DevId {} contador {}'.format(devId,counter)
-		for chatId in chatIds:				
-			jobQueue.run_once(callbackSendMenssage(chatId,msg),0) 
-	DEV_IDS_LOCK.release()	
+	if counter == 1: # invasao
+		DEV_IDS_LOCK.acquire()
+		chatIds = DEV_IDS.get(devId, None)
+		if chatIds is not None:
+			jobQueue = userdata
+			msg = u'DevId {} foi invadido!!!!'.format(devId)
+			for chatId in chatIds:				
+				jobQueue.run_once(callbackSendMenssage(chatId,msg),0) 
+		DEV_IDS_LOCK.release()	
 
 if __name__ == '__main__':
 	updater = startTelegramUpdater()
