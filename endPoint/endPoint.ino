@@ -28,7 +28,7 @@ static const PROGMEM u1_t NWKSKEY[16] = {};
 static const u1_t PROGMEM APPSKEY[16] = {};
 
 // LoRaWAN end-device address, TTN DevAddr
-static const u4_t DEVADDR = 0x00;
+static const u4_t DEVADDR = 0x0;
 
 // These callbacks are only used in over-the-air activation, so they are
 // left empty here (we cannot leave them out completely unless
@@ -133,7 +133,7 @@ void initTimer()
     noInterrupts();    
     TCCR1A = 0; // config mode of operation
     TCCR1B = 0; // config mode of operation
-    OCR1A = 1562; // 1562 ticks with prescale 1024 at 16MHz ~ 100ms    
+    OCR1A = 1562; // 1562 ticks with prescale 1024 at 8MHz ~ 200ms    
     TIMSK1 |= (1 << OCIE1A); // enable TIMER1_COMPA_vect interrupt
     interrupts();
 }
@@ -163,7 +163,7 @@ ISR(TIMER1_COMPA_vect)
 
 void pinInterrupt()
 {
-    startTimer(); // start ~ 100ms timer
+    startTimer(); // start ~ 200ms timer
 }
 
 void setup()
